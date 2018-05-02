@@ -53,10 +53,13 @@ public class SqueezeBoxAudioSink implements AudioSink {
 
     private AudioHTTPServer audioHTTPServer;
     private SqueezeBoxPlayerHandler playerHandler;
+    private String callbackUrl;
 
-    public SqueezeBoxAudioSink(SqueezeBoxPlayerHandler playerHandler, AudioHTTPServer audioHTTPServer) {
+    public SqueezeBoxAudioSink(SqueezeBoxPlayerHandler playerHandler, AudioHTTPServer audioHTTPServer,
+            String callbackUrl) {
         this.playerHandler = playerHandler;
         this.audioHTTPServer = audioHTTPServer;
+        this.callbackUrl = callbackUrl;
     }
 
     @Override
@@ -72,38 +75,44 @@ public class SqueezeBoxAudioSink implements AudioSink {
     @Override
     public void process(AudioStream audioStream)
             throws UnsupportedAudioFormatException, UnsupportedAudioStreamException {
-        AudioFormat format = audioStream.getFormat();
-        if (!AudioFormat.WAV.isCompatible(format) && !AudioFormat.MP3.isCompatible(format)) {
-            throw new UnsupportedAudioFormatException("Currently only MP3 and WAV formats are supported: ", format);
-        }
-
-        String url;
-        if (audioStream instanceof URLAudioStream) {
-            url = ((URLAudioStream) audioStream).getURL();
-        } else if (audioStream instanceof FixedLengthAudioStream) {
-            // Since Squeezebox will make multiple requests for the stream, set a timeout on the stream
-            url = audioHTTPServer.serve((FixedLengthAudioStream) audioStream, STREAM_TIMEOUT).toString();
-
-            if (AudioFormat.WAV.isCompatible(format)) {
-                url += AudioStreamUtils.EXTENSION_SEPARATOR + FileAudioStream.WAV_EXTENSION;
-            } else if (AudioFormat.MP3.isCompatible(format)) {
-                url += AudioStreamUtils.EXTENSION_SEPARATOR + FileAudioStream.MP3_EXTENSION;
-            }
-
-            // Form the URL for streaming the notification from the OH2 web server
-            String host = playerHandler.getHostAndPort();
-            if (host == null) {
-                logger.warn("Unable to get host/port from which to stream notification");
-                return;
-            }
-            url = host + url;
+        if (audioStream == null) {
+            // Stop playing stream
+            // TODO
+            // playerhandler.stopPlayingNotification();
         } else {
-            throw new UnsupportedAudioStreamException(
-                    "SqueezeBox can only handle URLAudioStream or FixedLengthAudioStreams.", null);
-        }
+            AudioFormat format = audioStream.getFormat();
+            if (!AudioFormat.WAV.isCompatible(format) && !AudioFormat.MP3.isCompatible(format)) {
+                throw new UnsupportedAudioFormatException("Currently only MP3 and WAV formats are supported: ", format);
+            }
 
-        logger.debug("Processing audioStream {} of format {}", url, format);
-        playerHandler.playNotificationSoundURI(new StringType(url));
+            String url;
+            if (audioStream instanceof URLAudioStream) {
+                url = ((URLAudioStream) audioStream).getURL();
+            } else if (audioStream instanceof FixedLengthAudioStream) {
+                // Since Squeezebox will make multiple requests for the stream, set a timeout on the stream
+                url = audioHTTPServer.serve((FixedLengthAudioStream) audioStream, STREAM_TIMEOUT).toString();
+
+                if (AudioFormat.WAV.isCompatible(format)) {
+                    url += AudioStreamUtils.EXTENSION_SEPARATOR + FileAudioStream.WAV_EXTENSION;
+                } else if (AudioFormat.MP3.isCompatible(format)) {
+                    url += AudioStreamUtils.EXTENSION_SEPARATOR + FileAudioStream.MP3_EXTENSION;
+                }
+
+                // Form the URL for streaming the notification from the OH2 web server
+                if (callbackUrl != null) {
+                    url = callbackUrl + url;
+                } else {
+                    logger.warn("Cannot play stream because there is no callback url");
+                    return;
+                }
+            } else {
+                throw new UnsupportedAudioStreamException(
+                        "SqueezeBox can only handle URLAudioStream or FixedLengthAudioStreams.", null);
+            }
+
+            logger.debug("Processing audioStream {} of format {}", url, format);
+            playerHandler.playNotificationSoundURI(new StringType(url));
+        }
     }
 
     @Override

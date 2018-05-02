@@ -10,6 +10,7 @@ package org.openhab.binding.squeezebox.internal;
 
 import static org.openhab.binding.squeezebox.SqueezeBoxBindingConstants.*;
 
+import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
@@ -35,6 +36,7 @@ import org.openhab.binding.squeezebox.handler.SqueezeBoxPlayerHandler;
 import org.openhab.binding.squeezebox.handler.SqueezeBoxServerHandler;
 import org.openhab.binding.squeezebox.internal.discovery.SqueezeBoxPlayerDiscoveryParticipant;
 import org.osgi.framework.ServiceRegistration;
+import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
@@ -66,6 +68,19 @@ public class SqueezeBoxHandlerFactory extends BaseThingHandlerFactory {
 
     private SqueezeBoxStateDescriptionOptionsProvider stateDescriptionProvider;
 
+    // URL (scheme+server+port) to use for playing notification sounds
+    private String configCallbackUrl = null;
+
+    @Override
+    protected void activate(ComponentContext componentContext) {
+        super.activate(componentContext);
+        Dictionary<String, Object> properties = componentContext.getProperties();
+        configCallbackUrl = (String) properties.get("callbackUrl");
+        if (configCallbackUrl != null) {
+            logger.debug("Using callback URL from binding configuration: {}", configCallbackUrl);
+        }
+    }
+
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
         return SUPPORTED_THING_TYPES_UIDS.contains(thingTypeUID);
@@ -76,20 +91,20 @@ public class SqueezeBoxHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (thingTypeUID.equals(SQUEEZEBOXSERVER_THING_TYPE)) {
-            logger.trace("creating handler for bridge thing {}", thing);
+            logger.trace("Creating handler for bridge thing {}", thing);
             SqueezeBoxServerHandler bridge = new SqueezeBoxServerHandler((Bridge) thing);
             registerSqueezeBoxPlayerDiscoveryService(bridge);
             return bridge;
         }
 
         if (thingTypeUID.equals(SQUEEZEBOXPLAYER_THING_TYPE)) {
-            logger.trace("creating handler for player thing {}", thing);
-            SqueezeBoxPlayerHandler playerHandler = new SqueezeBoxPlayerHandler(thing, createCallbackUrl(),
-                    stateDescriptionProvider);
+            logger.trace("Creating handler for player thing {}", thing);
+            SqueezeBoxPlayerHandler playerHandler = new SqueezeBoxPlayerHandler(thing, stateDescriptionProvider);
 
             // Register the player as an audio sink
             logger.trace("Registering an audio sink for player thing {}", thing.getUID());
-            SqueezeBoxAudioSink audioSink = new SqueezeBoxAudioSink(playerHandler, audioHTTPServer);
+            SqueezeBoxAudioSink audioSink = new SqueezeBoxAudioSink(playerHandler, audioHTTPServer,
+                    createCallbackUrl());
             @SuppressWarnings("unchecked")
             ServiceRegistration<AudioSink> reg = (ServiceRegistration<AudioSink>) bundleContext
                     .registerService(AudioSink.class.getName(), audioSink, new Hashtable<String, Object>());
@@ -168,19 +183,23 @@ public class SqueezeBoxHandlerFactory extends BaseThingHandlerFactory {
     }
 
     private String createCallbackUrl() {
-        final String ipAddress = networkAddressService.getPrimaryIpv4HostAddress();
-        if (ipAddress == null) {
-            logger.warn("No network interface could be found.");
-            return null;
-        }
+        if (configCallbackUrl != null) {
+            return configCallbackUrl;
+        } else {
+            final String ipAddress = networkAddressService.getPrimaryIpv4HostAddress();
+            if (ipAddress == null) {
+                logger.warn("No network interface could be found.");
+                return null;
+            }
 
-        final int port = HttpServiceUtil.getHttpServicePort(bundleContext);
-        if (port == -1) {
-            logger.warn("Cannot find port of the http service.");
-            return null;
-        }
+            final int port = HttpServiceUtil.getHttpServicePort(bundleContext);
+            if (port == -1) {
+                logger.warn("Cannot find port of the http service.");
+                return null;
+            }
 
-        return "http://" + ipAddress + ":" + port;
+            return "http://" + ipAddress + ":" + port;
+        }
     }
 
     @Reference

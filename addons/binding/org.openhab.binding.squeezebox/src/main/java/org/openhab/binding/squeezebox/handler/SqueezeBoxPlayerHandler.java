@@ -113,8 +113,6 @@ public class SqueezeBoxPlayerHandler extends BaseThingHandler implements Squeeze
      */
     private Integer notificationSoundVolume = null;
 
-    private String callbackUrl;
-
     private SqueezeBoxStateDescriptionOptionsProvider stateDescriptionProvider;
 
     private static final ExpiringCacheMap<String, RawType> IMAGE_CACHE = new ExpiringCacheMap<>(
@@ -126,10 +124,9 @@ public class SqueezeBoxPlayerHandler extends BaseThingHandler implements Squeeze
      * @param thing
      * @param stateDescriptionProvider
      */
-    public SqueezeBoxPlayerHandler(@NonNull Thing thing, String callbackUrl,
+    public SqueezeBoxPlayerHandler(@NonNull Thing thing,
             SqueezeBoxStateDescriptionOptionsProvider stateDescriptionProvider) {
         super(thing);
-        this.callbackUrl = callbackUrl;
         this.stateDescriptionProvider = stateDescriptionProvider;
     }
 
@@ -174,7 +171,8 @@ public class SqueezeBoxPlayerHandler extends BaseThingHandler implements Squeeze
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         if (squeezeBoxServerHandler == null) {
-            logger.info("player thing {} has no server configured, ignoring command: {}", getThing().getUID(), command);
+            logger.debug("Player thing {} has no server configured, ignoring command: {}", getThing().getUID(),
+                    command);
             return;
         }
         String mac = getConfigAs(SqueezeBoxPlayerConfig.class).mac;
@@ -675,12 +673,5 @@ public class SqueezeBoxPlayerHandler extends BaseThingHandler implements Squeeze
         } finally {
             notificationSoundVolume = null;
         }
-    }
-
-    /*
-     * Return the IP and port of the OH2 web server
-     */
-    public String getHostAndPort() {
-        return callbackUrl;
     }
 }
